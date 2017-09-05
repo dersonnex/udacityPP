@@ -1,19 +1,19 @@
+
 #include <stdio.h>
 int main()
 {
   int i=5;
   oddeven(i);
- }
+}
  
- //定义一个判断奇偶数的函数
+//定义一个判断奇偶数的函数
 int oddeven(int n)
 {
- intx;
+ int x;
  x=n%2;
  if(x != 0){
-  printf("%d是奇数"，n);
+  printf("%d是奇数",n);
+  }else{
+      printf("%d是偶数",n);
   }
-  else{
-  printf("%d是偶数",n);
-  }
- }
+}
