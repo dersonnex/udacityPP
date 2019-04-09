@@ -1,0 +1,707 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 中国五个城市PM 2.5数据分析"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 简介"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "PM2.5的检测数值通常包含在环境部门和公司的空气质量报告中。 PM2.5是指大气颗粒物（PM），其直径小于或等于2.5微米。在环境科学中，特指悬浮在空气中的固体颗粒或液滴，是空气污染的主要来源之一。\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 项目完成指南\n",
+    "\n",
+    "\n",
+    "本项目中的数据分析流程和分析中使用的函数已经给出，如果你对Python不是很熟悉，通过前面课程对变量、模块、方法的简单掌握，你也可以完成本项目，请不要担心！请将你的重心放到观察数据、提出问题和解答问题上。\n",
+    "\n",
+    "<span style=\"color:blue\">你在本项目中的目标是对下面标记为蓝色的问题进行回答。\n",
+    "\n",
+    "> **小贴士**: 像这样的引用部分旨在为学员提供实用指导，帮助学员了解并使用 Jupyter notebook\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "## 观察数据\n",
+    "\n",
+    "本数据包含有中国五个城市(北京、上海、成都、广州、沈阳)从2010/1/1-2015/12/31的空气和气象数据。数据中的缺失值被标记为NaN。数据列名的含义如下：\n",
+    "\n",
+    "```\n",
+    "No: 行号\n",
+    "year: 年份\n",
+    "month: 月份\n",
+    "day: 日期\n",
+    "hour: 小时\n",
+    "season: 季节\n",
+    "PM: PM2.5浓度 (ug/m^3)\n",
+    "DEWP: 露点 (摄氏温度) 指在固定气压之下，空气中所含的气态水达到饱和而凝结成液态水所需要降至的温度。\n",
+    "TEMP: Temperature (摄氏温度)\n",
+    "HUMI: 湿度 (%)\n",
+    "PRES: 气压 (hPa)\n",
+    "cbwd: 组合风向\n",
+    "Iws: 累计风速 (m/s)\n",
+    "precipitation: 降水量/时 (mm)\n",
+    "Iprec: 累计降水量 (mm)\n",
+    "```\n",
+    "\n",
+    "其中与PM2.5浓度相关的数据包含有多列，其中`PM_US Post` 的数据来源是[US Department of State Air Quality Monitoring Program](http://www.stateair.net/web/post/1/4.html)。其他PM相关的数据来源于中国生态环境部在五个城市设置的不同站点，比如`PM_Xuhui`位于上海市徐汇区，`PM_Dongsihuan`位于北京市的东四环。\n",
+    "\n",
+    "本项目中的数据可以从[Kaggle网站](https://www.kaggle.com/uciml/pm25-data-for-five-chinese-cities)上下载到，该数据也被收录于[UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/PM2.5+Data+of+Five+Chinese+Cities#)。\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "首先我们先运行下面的代码单元格来加载你将在分析中使用的所有数据和模块。\n",
+    "\n",
+    "在此处我们提供了一个叫做`helper_functions`的模块，其中包含`filter_data`, `reading_stats`, `univariate_plot`几个函数，你无需了解它们的实现方式，按照我们在`turtle`中学到的方法，可以直接当做黑匣子来使用。"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import csv\n",
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "import matplotlib.pyplot as plt\n",
+    "import seaborn\n",
+    "\n",
+    "%matplotlib inline\n",
+    "\n",
+    "from helper_functions import filter_data, reading_stats, univariate_plot"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 数据整理\n",
+    "\n",
+    "由于项目难度设定的问题，我们不希望你在现在了解过多数据评估和清理的细节，这些都可以在今后靠你的学习和掌握来完成。所以在此处对所有数据的清理步骤我会提供给你现成的代码，你可以直接运行下面的“数据整理”本部分的代码。\n",
+    "\n",
+    "在这部分中，我们按照下面思路进行了数据整理：由于五个数据文件中都包含`PM_US Post`一列，并且该列的缺失值相对于其他列缺失值较小，因此在下面的分析中我们仅保留该列数据作为PM 2.5的关键数据。在下面的代码中我们也预先对所有城市的season进行了转换，并为数据添加了一个`city`列，便于对不同城市进行对比分析。\n",
+    "\n",
+    "其他的气象数据我们暂时先不考虑，故进行了删除。\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "files = ['BeijingPM20100101_20151231.csv',\n",
+    "       'ChengduPM20100101_20151231.csv',\n",
+    "       'GuangzhouPM20100101_20151231.csv',\n",
+    "       'ShanghaiPM20100101_20151231.csv',\n",
+    "       'ShenyangPM20100101_20151231.csv']\n",
+    "\n",
+    "out_columns = ['No', 'year', 'month', 'day', 'hour', 'season', 'PM_US Post']"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# create a void dataframe\n",
+    "df_all_cities = pd.DataFrame()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# iterate to write diffrent files\n",
+    "for inx, val in enumerate(files):\n",
+    "    df = pd.read_csv(val)\n",
+    "    df = df[out_columns]\n",
+    "    # create a city column\n",
+    "    df['city'] = val.split('P')[0]\n",
+    "    # map season \n",
+    "    df['season'] = df['season'].map({1:'Spring', 2:'Summer', 3:'Autumn', 4: 'Winter'})\n",
+    "    # append each file and merge all files into one\n",
+    "    df_all_cities = df_all_cities.append(df)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# replace the space in variable names with '_'\n",
+    "df_all_cities.columns = [c.replace(' ', '_') for c in df_all_cities.columns]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "我们来简单查看一下处理后的数据，观察数据是否符合我们的要求："
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>No</th>\n",
+       "      <th>year</th>\n",
+       "      <th>month</th>\n",
+       "      <th>day</th>\n",
+       "      <th>hour</th>\n",
+       "      <th>season</th>\n",
+       "      <th>PM_US_Post</th>\n",
+       "      <th>city</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>1</td>\n",
+       "      <td>2010</td>\n",
+       "      <td>1</td>\n",
+       "      <td>1</td>\n",
+       "      <td>0</td>\n",
+       "      <td>Winter</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>Beijing</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>2</td>\n",
+       "      <td>2010</td>\n",
+       "      <td>1</td>\n",
+       "      <td>1</td>\n",
+       "      <td>1</td>\n",
+       "      <td>Winter</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>Beijing</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>3</td>\n",
+       "      <td>2010</td>\n",
+       "      <td>1</td>\n",
+       "      <td>1</td>\n",
+       "      <td>2</td>\n",
+       "      <td>Winter</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>Beijing</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>4</td>\n",
+       "      <td>2010</td>\n",
+       "      <td>1</td>\n",
+       "      <td>1</td>\n",
+       "      <td>3</td>\n",
+       "      <td>Winter</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>Beijing</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>5</td>\n",
+       "      <td>2010</td>\n",
+       "      <td>1</td>\n",
+       "      <td>1</td>\n",
+       "      <td>4</td>\n",
+       "      <td>Winter</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>Beijing</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "   No  year  month  day  hour  season  PM_US_Post     city\n",
+       "0   1  2010      1    1     0  Winter         NaN  Beijing\n",
+       "1   2  2010      1    1     1  Winter         NaN  Beijing\n",
+       "2   3  2010      1    1     2  Winter         NaN  Beijing\n",
+       "3   4  2010      1    1     3  Winter         NaN  Beijing\n",
+       "4   5  2010      1    1     4  Winter         NaN  Beijing"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df_all_cities.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "整理后的列名含义如下：\n",
+    "\n",
+    "\n",
+    "```\n",
+    "No: 行号\n",
+    "year: 年份\n",
+    "month: 月份\n",
+    "day: 日期\n",
+    "hour: 小时\n",
+    "season: 季节\n",
+    "PM_US_Post: PM2.5浓度 (ug/m^3)\n",
+    "city: 城市名\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 提出问题\n",
+    "\n",
+    "在此项目中，你将以一名数据分析师的身份执行数据的探索性分析。你将了解数据分析过程的基本流程。但是在你开始查看数据前，请先思考几个你需要理解的关于PM2.5的问题，例如，如果你是一名环境工作者，你会想要获得什么类型的信息来了解不同城市的环境情况？如果你是一名生活在这个城市的普通人，你可以思考PM 2.5的变化会有什么样的周期性规律？选择什么时段出行空气质量最佳？"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<span style=\"color:blue\">**问题 1**：至少写下一个你感兴趣的问题，请确保这些问题能够由现有的数据进行回答。\n",
+    "\n",
+    "（问题示例：1. 2012年-2015年上海市PM 2.5的数据在不同的月份有什么变化趋势？2. 哪个城市的PM 2.5的含量较低？）\n",
+    "\n",
+    "  **问题一**： *广州的2012-2015年份的PM2.5是多少？*\n",
+    "\n",
+    "  **答案**： \n",
+    "\n",
+    "【本题考察点：数据分析过程 - 提出问题】"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "> **小贴士**: 下面是代码框(code cell). 运行代码框的方法与编辑上方的 Markdown 框的格式类似，你只需点击代码框，按下键盘快捷键 **Shift** + **Enter** 或 **Shift** + **Return** ，或者你也可先选择代码框，然后点击工具栏的 **运行** 按钮来运行代码。运行代码框时，相应单元左侧的信息会出现星号，即 `In [*]:`，若代码执行完毕，星号则会变为某个数字，如 `In [1]`。如果代码运行后有输出结果，输出将会以 `Out [1]:` 的形式出现，其中的数字将与 \"In\" 中的数字相对应。如果代码运行后没有输出结果，则不会有`Out [1]`出现。"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 数据筛选\n",
+    "\n",
+    "接下来我们将会对你在前面提出的问题进行更进一步的思考。\n",
+    "\n",
+    "`df_all_cities`是我们建立的一个包含所有数据的Pandas Dataframe，考虑到我们的分析目标，我们可能会需要提取部分数据来针对我们感兴趣的具体问题进行分析。为了方便大家对数据进行探索，我们定义了一个`reading_stats`的函数，通过输入不同的条件(conditions),该函数可以帮助我们筛选出这部分的数据。"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "在使用中，我们只需要调用`reading_stats`即可，我们在这个函数中调用了`filter_data`函数，因此并不需要我们直接操作`filter_data`函数。下面是对于该函数的一些提示。\n",
+    "\n",
+    "`reading_stats`函数中包含有3个参数：\n",
+    "\n",
+    "1. 第一个参数（必须）：需要被加载的 dataframe，数据将从这里开始分析。\n",
+    "2. 第二个参数（可选）：数据过滤器，可以根据一系列输入的条件(conditions)来过滤将要被分析的数据点。过滤器应作为一系列条件提供，每个条件之间使用逗号进行分割，并在外侧使用`\"\"`将其定义为字符串格式，所有的条件使用`[]`包裹。每个单独的条件应该为包含三个元素的一个字符串：`'<field> <op> <value>'`（元素与元素之间需要有一个空格字符来作为间隔），`<op>`可以使用以下任意一个运算符：>、<、>=、<=、==、!=。数据点必须满足所有条件才能计算在内。例如，[\"city == 'Beijing'\", \"season == 'Spring'\"] 仅保留北京市，季节为春天的数据。在第一个条件中, `<field>`是city，`<op>`是 ==, `<value>`是'Beijing',因为北京为字符串，所以加了单引号，它们三个元素之间分别添加一个空格。最后，这个条件需要使用双引号引用起来。这个例子中使用了两个条件，条件与条件之间使用逗号进行分割，这两个条件最后被放在`[]`之中。\n",
+    "3. 第三个参数（可选）：详细数据，该参数决定我们是否打印被选择的数据的详细统计信息。如果verbose = True，会自动打印数据的条数，以及四分位点，并绘制箱线图。如果verbose = False, 则只会返回筛选后的dataframe，不进行打印。"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "下面我们会使用上海市2012年-2015年的数据进行举例，探索数据中的一些问题。要获取这部分的数据，我们可以使用下面的函数来实现。"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/home/workspace/helper_functions.py:69: FutureWarning: Method .as_matrix will be removed in a future version. Use .values instead.\n",
+      "  pm_qtiles = data['PM_US_Post'].quantile([.25, .5, .75]).as_matrix()\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "There are 35064 readings (13.34%) matching the filter criteria.\n",
+      "The average readings of PM 2.5 is 52.88 ug/m^3.\n",
+      "The median readings of PM 2.5 is 41.00 ug/m^3.\n",
+      "25% of readings of PM 2.5 are smaller than 26.00 ug/m^3.\n",
+      "25% of readings of PM 2.5 are larger than 67.00 ug/m^3.\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<matplotlib.figure.Figure at 0x7fe8e05512b0>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "df_test = reading_stats(df_all_cities, [\"city == 'Shanghai'\", \"year >= 2012\"])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "<class 'pandas.core.frame.DataFrame'>\n",
+      "RangeIndex: 35064 entries, 0 to 35063\n",
+      "Data columns (total 8 columns):\n",
+      "No            35064 non-null int64\n",
+      "year          35064 non-null int64\n",
+      "month         35064 non-null int64\n",
+      "day           35064 non-null int64\n",
+      "hour          35064 non-null int64\n",
+      "season        35064 non-null object\n",
+      "PM_US_Post    33962 non-null float64\n",
+      "city          35064 non-null object\n",
+      "dtypes: float64(1), int64(5), object(2)\n",
+      "memory usage: 2.1+ MB\n"
+     ]
+    }
+   ],
+   "source": [
+    "df_test.info()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<span style=\"color:blue\">**问题2a**: 要回答你前面的提出的问题，你需要筛选符合哪些条件的数据？请具体说明。\n",
+    "\n",
+    "**答案**：*2012-2015年广州市的PM2.5数据*\n",
+    "\n",
+    "<span style=\"color:blue\">**问题2b**：请使用上面给出的`reading_stats`函数来调用你所需要的数据，请在下面填写合适的条件（conditions）。提示：对应此函数的第二个参数。\n",
+    "\n",
+    "**答案**：*[\"city == 'Guangzhou'\", \"year >= 2012\"]*\n",
+    "\n",
+    "【本题考察点：数据分析中的逻辑思维】"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "从这里的分析我们可以看出， 上海市2012年-2015年的PM2.5数据有35064条记录，其中PM_US Post站点的记录有33962条，缺失的数量并不是很大。因为Pandas（我们使用的第三方库）在计算统计数字的时候，会自动排除掉缺失的数值，因此在这里我们没有对缺失值进行任何处理。\n",
+    "\n",
+    "上海市在2012-2015年期间PM 2.5的值主要分布在0-125 ug/m^3这个区间，平均数值为52.88 ug/m^3，中位数为41.00 ug/m^3，有25%的读数小于26.00 ug/m^3，有25%的读数大于67.00 ug/m^3。\n",
+    "\n",
+    "下面请你对你所感兴趣的问题进行分析，并回答下面的问题：（提示: 你需要对前面提出的两个问题都进行思考。）"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 问题1 广州的2012-2015年份的PM2.5是多少？"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "There are 35064 readings (13.34%) matching the filter criteria.\n",
+      "The average readings of PM 2.5 is 50.17 ug/m^3.\n",
+      "The median readings of PM 2.5 is 42.00 ug/m^3.\n",
+      "25% of readings of PM 2.5 are smaller than 24.00 ug/m^3.\n",
+      "25% of readings of PM 2.5 are larger than 67.00 ug/m^3.\n",
+      "<class 'pandas.core.frame.DataFrame'>\n",
+      "RangeIndex: 35064 entries, 0 to 35063\n",
+      "Data columns (total 8 columns):\n",
+      "No            35064 non-null int64\n",
+      "year          35064 non-null int64\n",
+      "month         35064 non-null int64\n",
+      "day           35064 non-null int64\n",
+      "hour          35064 non-null int64\n",
+      "season        35063 non-null object\n",
+      "PM_US_Post    31455 non-null float64\n",
+      "city          35064 non-null object\n",
+      "dtypes: float64(1), int64(5), object(2)\n",
+      "memory usage: 2.1+ MB\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/home/workspace/helper_functions.py:69: FutureWarning: Method .as_matrix will be removed in a future version. Use .values instead.\n",
+      "  pm_qtiles = data['PM_US_Post'].quantile([.25, .5, .75]).as_matrix()\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<matplotlib.figure.Figure at 0x7fe8acf41be0>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# TO DO: First question\n",
+    "\n",
+    "df1 = reading_stats(df_all_cities, [\"city == 'Guangzhou'\", \"year >= 2012\"])\n",
+    "df1.info()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<span style=\"color:blue\">**问题2c**：你获取的数据分别包含多少条记录，统计特征如何？\n",
+    "\n",
+    "**答案**：*广州2012-2015年的PM2.5数据有35064条数据，其中PM_US Post站点的记录有31455条，缺失的数量并不是很大。\n",
+    "2012-2015年间PM2.5值主要分布在0-135ug/m^3这个区间内，平均数值为50.17ug/m^3，中位数为 42.00ug/m^3，有25%的读数小于24.00ug/m^3，有25%的读数大于67.00 ug/m^3。*\n",
+    "【考察点：统计基础】"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 数据探索性分析和可视化"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "得到了想要的数据之后，接下来你可以对数据进行探索性分析和可视化了，并报告你的发现！在这部分我们同样为你提供了一个函数`univariate_plot`来对PM 2.5的观测平均值制作柱形图的可视化，下面是关于本函数使用方法的一些提示：\n",
+    "\n",
+    "1. 第一个参数（必须）：筛选后数据的 dataframe，将从这里分析数据。\n",
+    "2. 第二个参数（必须）：数据分析进行的维度，在这里可以填入一个column_name，比如'season', 'month', 'hour'等，对数据进行分组分析。\n",
+    "3. 第三个参数（可选）：可视化中柱形的颜色，默认为蓝色，你也可以选择你喜爱的其他颜色，比如red，blue，green等。但是请尽量保证一份可视化报告中图表颜色的一致和整洁性。\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "我们以上海市2012年之后不同月份的PM 2.5的观测平均值为例，使用`univariate_plot`函数绘制了可视化："
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<matplotlib.figure.Figure at 0x7fe8acf0e208>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "univariate_plot(df_test, 'month', 'grey')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "从本可视化中我们可以看出在较温暖的月份（6-10月）空气中的PM 2.5含量较低，而较寒冷的月份，比如（11-1月）空气中的PM 2.5含量较高。"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "接下来，你可以对你提出的问题进行探索了！请使用上面的函数探索一些不同的变量，并记录你发现的一些趋势。如果你想用其他方式或多个方式探索数据集，可自行创建更多的单元格。"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<matplotlib.figure.Figure at 0x7fe8acecbcc0>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# TO DO: \n",
+    "# please use univariate_plot to visualize your data \n",
+    "univariate_plot(df1,'year','green')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "【考察点：如何调用函数】"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<span style=\"color:blue\">**问题 3**：上述可视化有何有趣的趋势？是否能够回答你的问题？（如果不能，请说明你需要什么信息来帮助你来回答问题）\n",
+    "\n",
+    "**答案**：广州市2012年PM2.5平均值接近60ug/m^3，到2015年已低于40ug/m^3。因此可以得出2012-2015年PM2.5平均值呈逐年下降趋势。\n",
+    "\n",
+    "【考察点：数据分析过程 - 可视化的解读，得出结论】"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 结论\n",
+    "\n",
+    "恭喜你完成了此项目！这只是数据分析过程的一个样本：从生成问题、整理数据到探索数据。通常，在数据分析过程的这个点，你可能想要通过执行统计检验或将数据拟合到一个模型进行预测，来对我们的数据得出结论。还有很多可以对数据执行的潜在分析，但仅靠这里所给的有限代码无法完成。除了结果轴上的PM_US Post的平均值，你还可以观察具有影响的其他特征，如其他站点的PM2.5读数,各种气象数据。我们还未研究过气象数据与PM2.5之间的相关关系。如果你对数据科学方法感兴趣的话，我们鼓励你继续学习后续的课程，掌握更多的数据分析相关的技能！"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<span style=\"color:blue\">**问题 4**：根据目前你对数据分析的了解，请思考一个可以应用数据科学技术的话题或兴趣领域。你希望使用什么样的数据，来得到什么样的信息？\n",
+    "\n",
+    "**答案**: 我希望应用数据科学来研究往年深圳春运期间的铁路旅客人流量，根据不同时间的人流量的总数，可以预测出购买春运车票的时间点，从而能更方便的买到春运车票的时间点。\n",
+    "\n",
+    "【考察点：数据分析师解决的问题】"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "> 若想与他人分享我们的分析结果，除了向他们提供 jupyter Notebook (.ipynb) 文件的副本外，我们还可以将 Notebook 输出导出为一种甚至那些未安装 Python 的人都能打开的形式。从左上方的“文件 File”菜单，前往“下载为 Download As”子菜单。然后你可以选择一个可以更普遍查看的格式，例如 HTML (.html) 。你可能需要额外软件包或软件来执行这些导出。"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "恭喜你完成了这个项目！现在可以提交你的项目了。请按照上面的方法提供jupyter Notebook (.ipynb) 文件和 HTML (.html) 文件，将这两个文件打包成zip文件在后面的项目提交入口进行项目提交。"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.3"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
